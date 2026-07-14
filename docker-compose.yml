@@ -1,0 +1,8 @@
+services:
+  vkturntgbot:
+    build: .
+    container_name: vkturntgbot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - .:/app
