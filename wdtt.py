@@ -157,6 +157,15 @@ def short_password(password: str) -> str:
     return f"{password[:4]}...{password[-4:]}"
 
 
+def set_name(password: str, name: str) -> None:
+    data = _read_passwords()
+    if password not in (data.get("passwords") or {}):
+        raise RuntimeError(f"Клиент с паролем {password} не найден")
+    names = _read_names()
+    names[password] = name
+    _write_names_atomic(names)
+
+
 def _strip_vk_hash(raw: str) -> str:
     s = raw.strip()
     if "/" in s:
