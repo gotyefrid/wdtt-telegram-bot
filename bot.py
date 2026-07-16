@@ -396,7 +396,7 @@ async def step_name(message: Message, state: FSMContext):
 async def step_new_vk_link(message: Message, state: FSMContext):
     vk_link = _valid_vk_link(message.text)
     if not vk_link:
-        await message.answer("Ссылка должна начинаться с https://vk.com/call/join/. Попробуйте ещё раз:")
+        await message.answer("Ссылка должна начинаться с https://vk.com/call/join/ или https://vk.ru/call/join/. Попробуйте ещё раз:")
         return
     data = await state.get_data()
     name = data["name"]
@@ -501,7 +501,7 @@ async def cb_link(cb: CallbackQuery, state: FSMContext):
 async def step_existing_vk_link(message: Message, state: FSMContext):
     vk_link = _valid_vk_link(message.text)
     if not vk_link:
-        await message.answer("Ссылка должна начинаться с https://vk.com/call/join/. Попробуйте ещё раз:")
+        await message.answer("Ссылка должна начинаться с https://vk.com/call/join/ или https://vk.ru/call/join/. Попробуйте ещё раз:")
         return
     data = await state.get_data()
     index = data["peer_index"]
@@ -659,12 +659,15 @@ async def cb_wdel_confirm(cb: CallbackQuery, state: FSMContext):
 # Helpers
 # ---------------------------------------------------------------------------
 
+_VK_LINK_PREFIXES = ("https://vk.com/call/join/", "https://vk.ru/call/join/")
+
+
 def _valid_vk_link(text: str | None) -> str | None:
     """Return stripped link if valid, else None."""
     if not text or not text.strip():
         return None
     s = text.strip()
-    return s if s.startswith("https://vk.com/call/join/") else None
+    return s if s.startswith(_VK_LINK_PREFIXES) else None
 
 
 def _make_link_settings(private_key: str, ip: str, vk_link: str) -> dict:
