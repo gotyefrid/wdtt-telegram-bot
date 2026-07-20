@@ -32,7 +32,6 @@ docker logs vkturntgbot        # логи
 | `backups/wdtt/` | Бэкапы `passwords.json` перед каждой записью (не в git) |
 | `scripts/setup-wdtt-ssh.sh` | Провижининг SSH-доступа к `wdtt.service` при разворачивании на новом сервере: создаёт пользователя `wdtt-ctl`, ключ, forced-command и sudo-правило. Запускать от root на хосте один раз, идемпотентен |
 | `scripts/wdtt-ctl.sh` | Forced-command скрипт, на который указывает ключ из `setup-wdtt-ssh.sh`; разбирает `start`/`stop`/`status` и вызывает `systemctl` через `sudo` |
-| `scripts/backup-to-telegram.sh` | Архивирует `passwords.json` + `names.json` из `/etc/wdtt` и шлёт беззвучным сообщением (`disable_notification=true`) через Bot API получателю `TELEGRAM_BACKUP_CHAT_ID` (или первому id из `ALLOWED_USERS`). Читает `.env` сам — запускается на хосте через cron, не в контейнере |
 
 ## Переменные окружения (.env)
 
