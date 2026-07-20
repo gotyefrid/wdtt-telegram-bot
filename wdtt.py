@@ -279,3 +279,9 @@ def set_vk_hash(password: str, vk_hash: str) -> str:
 def build_wdtt_link(password: str, vk_hash: str) -> str:
     ports = WDTT_PORTS.split(",")
     return f"wdtt://{WDTT_PUBLIC_IP}:{ports[0]}:{ports[1]}:{ports[2]}:{password}:{vk_hash}"
+
+
+def ios_peer_address() -> str:
+    """host:port для iOS-ссылки (SRTP-WRAP-A) — тот же сервер, что и у wdtt://,
+    порт — первый из WDTT_PORTS (56000)."""
+    return f"{WDTT_PUBLIC_IP}:{WDTT_PORTS.split(',')[0]}"

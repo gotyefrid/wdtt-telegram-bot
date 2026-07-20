@@ -16,6 +16,7 @@ from aiogram.types import (
 )
 from config import BOT_TOKEN, ALLOWED_USERS
 import wdtt
+from ios_link import build_ios_link
 
 logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
@@ -134,6 +135,12 @@ def _device_text(client: dict) -> str:
     if not client["device_id"]:
         return "ещё не подключалось"
     return f"{client['device_id']}, {client['ip'] or '?'}"
+
+
+def _links_text(password: str, vk_hash: str) -> str:
+    wdtt_link = wdtt.build_wdtt_link(password, vk_hash)
+    ios_link = build_ios_link(vk_hash, wdtt.ios_peer_address(), password)
+    return f"WDTT:\n<code>{wdtt_link}</code>\n\niOS:\n<code>{ios_link}</code>"
 
 
 async def screen_client(cb: CallbackQuery, password: str) -> None:
@@ -282,9 +289,9 @@ async def step_days(message: Message, state: FSMContext):
         await screen_menu(message)
         return
 
-    link = wdtt.build_wdtt_link(client["password"], client["vk_hash"])
+    links = _links_text(client["password"], client["vk_hash"])
     await message.answer(
-        f'✅ Клиент "{html.escape(name)}" создан.\n\nСсылка для подключения:\n<code>{link}</code>',
+        f'✅ Клиент "{html.escape(name)}" создан.\n\nСсылки для подключения:\n\n{links}',
         parse_mode="HTML",
     )
     await screen_menu(message)
@@ -306,9 +313,9 @@ async def cb_link(cb: CallbackQuery, state: FSMContext):
         return
 
     if client["vk_hash"]:
-        link = wdtt.build_wdtt_link(password, client["vk_hash"])
+        links = _links_text(password, client["vk_hash"])
         await cb.message.edit_text(
-            f'🔗 Ссылка для "{html.escape(client["name"] or "без имени")}":\n<code>{link}</code>',
+            f'🔗 Ссылки для "{html.escape(client["name"] or "без имени")}":\n\n{links}',
             reply_markup=kb_client_actions(password),
             parse_mode="HTML",
         )
@@ -343,9 +350,9 @@ async def step_existing_vk_hash(message: Message, state: FSMContext):
         await screen_menu(message)
         return
 
-    link = wdtt.build_wdtt_link(password, vk_hash)
+    links = _links_text(password, vk_hash)
     await message.answer(
-        f'🔗 Ссылка для "{html.escape(client["name"] or "без имени")}":\n<code>{link}</code>',
+        f'🔗 Ссылки для "{html.escape(client["name"] or "без имени")}":\n\n{links}',
         parse_mode="HTML",
     )
     await screen_menu(message)
