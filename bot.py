@@ -38,6 +38,9 @@ class NewClient(StatesGroup):
 class GetLink(StatesGroup):
     waiting_vk_hash = State()
 
+class Rename(StatesGroup):
+    waiting_name = State()
+
 
 # ---------------------------------------------------------------------------
 # Keyboards
@@ -66,6 +69,7 @@ def kb_clients(clients: list[dict]) -> InlineKeyboardMarkup:
 def kb_client_actions(password: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔗 Получить ссылку", callback_data=f"link:{password}")],
+        [InlineKeyboardButton(text="✏️ Переименовать",   callback_data=f"rename:{password}")],
         [InlineKeyboardButton(text="🗑 Удалить",          callback_data=f"del:{password}")],
         [InlineKeyboardButton(text="← Список",           callback_data="clients")],
     ])
@@ -374,6 +378,49 @@ async def step_existing_vk_hash(message: Message, state: FSMContext):
         link_preview_options=NO_PREVIEW,
     )
     await screen_menu(message)
+
+
+# ---------------------------------------------------------------------------
+# Callback handlers — rename client
+# ---------------------------------------------------------------------------
+
+@dp.callback_query(F.data.startswith("rename:"))
+async def cb_rename(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    password = cb.data.split(":", 1)[1]
+    await state.update_data(password=password)
+    await state.set_state(Rename.waiting_name)
+    await cb.message.edit_text(
+        "Введите новое имя клиента:\n(/cancel — отменить)",
+        reply_markup=None,
+    )
+    await cb.answer()
+
+
+@dp.message(Rename.waiting_name)
+async def step_rename(message: Message, state: FSMContext):
+    if not message.text:
+        await message.answer("Отправьте имя текстом:")
+        return
+    raw = message.text.strip()
+    name = re.sub(r"[^a-zA-Z0-9_-]", "", raw)
+    if not name:
+        await message.answer("Имя должно содержать хотя бы одну латинскую букву или цифру. Попробуйте ещё раз:")
+        return
+    data = await state.get_data()
+    password = data["password"]
+    await state.clear()
+
+    try:
+        wdtt.set_name(password, name)
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        await screen_menu(message)
+        return
+
+    await message.answer(f'✅ Клиент переименован в "{html.escape(name)}".', parse_mode="HTML")
+    await screen_clients(message)
 
 
 # ---------------------------------------------------------------------------
