@@ -4,6 +4,7 @@ import logging
 import re
 import time
 from datetime import datetime
+from urllib.parse import quote
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -137,10 +138,21 @@ def _device_text(client: dict) -> str:
     return f"{client['device_id']}, {client['ip'] or '?'}"
 
 
+def _qr_link(data: str) -> str:
+    return f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={quote(data, safe='')}"
+
+
 def _links_text(password: str, vk_hash: str) -> str:
     wdtt_link = wdtt.build_wdtt_link(password, vk_hash)
     ios_link = build_ios_link(vk_hash, wdtt.ios_peer_address(), password)
-    return f"WDTT:\n<code>{wdtt_link}</code>\n\niOS:\n<code>{ios_link}</code>"
+    wdtt_qr = _qr_link(wdtt_link)
+    ios_qr = _qr_link(ios_link)
+    return (
+        f"WDTT:\n<code>{wdtt_link}</code>\n"
+        f'<a href="{wdtt_qr}">QR-код WDTT</a>\n\n'
+        f"iOS:\n<code>{ios_link}</code>\n"
+        f'<a href="{ios_qr}">QR-код iOS</a>'
+    )
 
 
 async def screen_client(cb: CallbackQuery, password: str) -> None:
