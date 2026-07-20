@@ -33,6 +33,8 @@ docker logs vkturntgbot        # логи
 | `docker-compose.yml` | Сервис `vkturntgbot`: монтирует `.` в `/app` и `/etc/wdtt` в `/etc/wdtt` |
 | `secrets/wdtt_ssh_key` | Приватный ключ для forced-command SSH к хосту (не в git) |
 | `backups/wdtt/` | Бэкапы `passwords.json` перед каждой записью (не в git) |
+| `scripts/setup-wdtt-ssh.sh` | Провижининг SSH-доступа к `wdtt.service` при разворачивании на новом сервере: создаёт пользователя `wdtt-ctl`, ключ, forced-command и sudo-правило. Запускать от root на хосте один раз, идемпотентен |
+| `scripts/wdtt-ctl.sh` | Forced-command скрипт, на который указывает ключ из `setup-wdtt-ssh.sh`; разбирает `start`/`stop`/`status` и вызывает `systemctl` через `sudo` |
 
 ## Переменные окружения (.env)
 
@@ -49,7 +51,7 @@ docker logs vkturntgbot        # логи
 | `WDTT_CONFIG_DIR` | Путь к конфигу wdtt в контейнере (`/etc/wdtt`) |
 | `WDTT_PUBLIC_IP` | Публичный IP для ссылок `wdtt://` |
 | `WDTT_SERVICE_NAME` | Имя systemd-юнита (`wdtt`) |
-| `WDTT_SSH_HOST` / `WDTT_SSH_USER` / `WDTT_SSH_KEY_PATH` | SSH-доступ к хосту для start/stop/status сервиса |
+| `WDTT_SSH_HOST` / `WDTT_SSH_USER` / `WDTT_SSH_KEY_PATH` | SSH-доступ к хосту для start/stop/status сервиса. `WDTT_SSH_USER` — непривилегированный пользователь `wdtt-ctl`, создаётся `scripts/setup-wdtt-ssh.sh` |
 
 ## Инбаунд WireGuard (id=3)
 
