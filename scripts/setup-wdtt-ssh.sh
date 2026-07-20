@@ -15,7 +15,7 @@ CTL_USER="${WDTT_SSH_USER:-wdtt-ctl}"
 KEY_PATH="$PROJECT_DIR/secrets/wdtt_ssh_key"
 CTL_SCRIPT="$PROJECT_DIR/scripts/wdtt-ctl.sh"
 SYSTEMCTL_BIN="$(command -v systemctl)"
-NOLOGIN_BIN="$(command -v nologin || echo /usr/sbin/nologin)"
+CTL_SHELL="$(command -v sh)"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Запустите от root: sudo $0" >&2
@@ -26,13 +26,17 @@ if ! systemctl list-unit-files 2>/dev/null | grep -q '^wdtt\.service'; then
     echo "Предупреждение: wdtt.service не найден в systemd — убедитесь, что сервис уже установлен." >&2
 fi
 
-# 1. Системный пользователь без интерактивного логина
+# 1. Системный пользователь. Шелл должен быть рабочим (не nologin/false):
+# sshd запускает forced command как "$SHELL -c command", и nologin эту -c
+# команду игнорирует, просто отказывая в доступе — реальную защиту даёт
+# сам forced command в authorized_keys (см. ниже), а не шелл.
 if ! id "$CTL_USER" >/dev/null 2>&1; then
-    useradd --system --create-home --home-dir "/home/$CTL_USER" --shell "$NOLOGIN_BIN" "$CTL_USER"
+    useradd --system --create-home --home-dir "/home/$CTL_USER" --shell "$CTL_SHELL" "$CTL_USER"
     echo "Создан пользователь $CTL_USER"
 else
     echo "Пользователь $CTL_USER уже существует"
 fi
+usermod --shell "$CTL_SHELL" "$CTL_USER"
 
 install -d -m 700 -o "$CTL_USER" -g "$CTL_USER" "/home/$CTL_USER/.ssh"
 
