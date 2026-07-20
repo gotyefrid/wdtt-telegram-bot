@@ -10,6 +10,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -190,6 +191,21 @@ def allowed(user_id: int) -> bool:
     return user_id in ALLOWED_USERS
 
 
+async def send_backup(bot: Bot) -> None:
+    """Шлёт архив passwords.json+names.json всем ALLOWED_USERS беззвучным сообщением."""
+    try:
+        data, filename = wdtt.backup_archive()
+    except Exception:
+        logging.exception("Не удалось собрать бекап")
+        return
+    for user_id in ALLOWED_USERS:
+        try:
+            document = BufferedInputFile(data, filename=filename)
+            await bot.send_document(user_id, document, disable_notification=True)
+        except Exception:
+            logging.exception("Не удалось отправить бекап пользователю %s", user_id)
+
+
 # ---------------------------------------------------------------------------
 # Command handlers
 # ---------------------------------------------------------------------------
@@ -308,6 +324,7 @@ async def step_days(message: Message, state: FSMContext):
         await screen_menu(message)
         return
 
+    await send_backup(message.bot)
     links = _links_text(client["password"], client["vk_hash"])
     await message.answer(
         f'✅ Клиент "{html.escape(name)}" создан.\n\nСсылки для подключения:\n\n{links}',
@@ -371,6 +388,7 @@ async def step_existing_vk_hash(message: Message, state: FSMContext):
         await screen_menu(message)
         return
 
+    await send_backup(message.bot)
     links = _links_text(password, vk_hash)
     await message.answer(
         f'🔗 Ссылки для "{html.escape(client["name"] or "без имени")}":\n\n{links}',
@@ -419,6 +437,7 @@ async def step_rename(message: Message, state: FSMContext):
         await screen_menu(message)
         return
 
+    await send_backup(message.bot)
     await message.answer(f'✅ Клиент переименован в "{html.escape(name)}".', parse_mode="HTML")
     await screen_clients(message)
 
@@ -456,6 +475,7 @@ async def cb_del_confirm(cb: CallbackQuery, state: FSMContext):
     except Exception as e:
         await cb.answer(f"Ошибка: {e}", show_alert=True)
         return
+    await send_backup(cb.bot)
     await cb.answer(f'Клиент "{deleted_name}" удалён.')
     await screen_clients(cb)
 

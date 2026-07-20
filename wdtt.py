@@ -1,7 +1,9 @@
+import io
 import json
 import os
 import secrets
 import subprocess
+import tarfile
 import time
 from datetime import datetime
 
@@ -285,3 +287,15 @@ def ios_peer_address() -> str:
     """host:port для iOS-ссылки (SRTP-WRAP-A) — тот же сервер, что и у wdtt://,
     порт — первый из WDTT_PORTS (56000)."""
     return f"{WDTT_PUBLIC_IP}:{WDTT_PORTS.split(',')[0]}"
+
+
+def backup_archive() -> tuple[bytes, str]:
+    """Архив passwords.json + names.json на текущий момент — для отправки в Telegram
+    после каждого изменения клиентов."""
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        for path, arcname in ((_PASSWORDS_FILE, "passwords.json"), (_NAMES_FILE, "names.json")):
+            if os.path.exists(path):
+                tar.add(path, arcname=arcname)
+    return buf.getvalue(), f"wdtt-backup-{stamp}.tar.gz"

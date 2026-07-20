@@ -56,7 +56,13 @@ docker logs vkturntgbot        # логи
 - **Создать клиента** → диалог: имя → VK-хеш/ссылка → срок в днях → создаёт запись, возвращает `wdtt://`- и `vkturnproxy://`-ссылки
 - **Список клиентов** → кнопки по 2 в ряд (имя или `AAAA...ZZZZ`, если имя не задано) → карточка клиента
 - **Получить ссылку** → без диалога обе ссылки, если VK-хеш уже сохранён; иначе один раз спрашивает и сохраняет
+- **Переименовать** → диалог: новое имя → `wdtt.set_name`
 - **Удалить** → подтверждение → удаление записи + связанного устройства
+
+После каждого создания/переименования/задания VK-хеша/удаления клиента бот
+шлёт всем `ALLOWED_USERS` архив `passwords.json`+`names.json`
+(`bot.send_backup`, `wdtt.backup_archive`) беззвучным сообщением
+(`disable_notification=True`) — бекап без отдельного крона.
 
 ## FSM-состояния
 
@@ -78,9 +84,10 @@ get_client(password)                       # детальная запись о�
 add_client(name, vk_hash, expires_days)    # создаёт запись, возвращает {password, vk_hash}
 delete_client(password)                    # удаляет запись (+ связанное устройство), возвращает name
 set_vk_hash(password, vk_hash)             # задаёт VK-хеш, если он был пуст
-set_name(password, name)                   # ручной бэкфилл имени для старых клиентов
+set_name(password, name)                   # задаёт/меняет имя клиента (используется и кнопкой "Переименовать")
 build_wdtt_link(password, vk_hash)         # wdtt://ip:56000:56001:9000:password:vk_hash
 short_password(password)                   # "AAAA...ZZZZ" — заглушка вместо имени в списке
+backup_archive()                           # (bytes, filename) — tar.gz из passwords.json+names.json в памяти
 ```
 
 Мутирующие функции (`add_client`, `delete_client`, `set_vk_hash`) оборачивают
