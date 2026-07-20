@@ -13,8 +13,11 @@ from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    LinkPreviewOptions,
     Message,
 )
+
+NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 from config import BOT_TOKEN, ALLOWED_USERS
 import wdtt
 from ios_link import build_ios_link
@@ -305,6 +308,7 @@ async def step_days(message: Message, state: FSMContext):
     await message.answer(
         f'✅ Клиент "{html.escape(name)}" создан.\n\nСсылки для подключения:\n\n{links}',
         parse_mode="HTML",
+        link_preview_options=NO_PREVIEW,
     )
     await screen_menu(message)
 
@@ -330,6 +334,7 @@ async def cb_link(cb: CallbackQuery, state: FSMContext):
             f'🔗 Ссылки для "{html.escape(client["name"] or "без имени")}":\n\n{links}',
             reply_markup=kb_client_actions(password),
             parse_mode="HTML",
+            link_preview_options=NO_PREVIEW,
         )
         await cb.answer()
         return
@@ -366,6 +371,7 @@ async def step_existing_vk_hash(message: Message, state: FSMContext):
     await message.answer(
         f'🔗 Ссылки для "{html.escape(client["name"] or "без имени")}":\n\n{links}',
         parse_mode="HTML",
+        link_preview_options=NO_PREVIEW,
     )
     await screen_menu(message)
 
