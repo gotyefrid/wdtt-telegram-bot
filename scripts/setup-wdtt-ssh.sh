@@ -48,8 +48,35 @@ if [ ! -f "$KEY_PATH" ]; then
 else
     echo "Ключ $KEY_PATH уже существует, пропускаю генерацию"
 fi
+chmod 700 "$PROJECT_DIR/secrets"
 chmod 600 "$KEY_PATH"
 chmod 644 "$KEY_PATH.pub"
+
+# 2b. Проект обычно лежит под /root (0700) — sshd не сможет даже
+# stat'нуть forced-command скрипт для непривилегированного CTL_USER
+# ("Permission denied"), пока тот не получит право прохода (execute-bit)
+# через все родительские каталоги. Даём точечный ACL только на --x,
+# без чтения/листинга — secrets/ и остальные файлы проекта им не
+# читаются, т.к. защищены собственными правами.
+if ! command -v setfacl >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        apt-get install -y acl
+    else
+        echo "Установите пакет acl (нужен setfacl) и запустите скрипт снова." >&2
+        exit 1
+    fi
+fi
+walk_dir="$(dirname "$CTL_SCRIPT")"
+while [ "$walk_dir" != "/" ]; do
+    setfacl -m "u:$CTL_USER:--x" "$walk_dir"
+    walk_dir="$(dirname "$walk_dir")"
+done
+
+# 2c. .env часто оказывается мирочитаемым (644) — с открытым выше
+# проходом в /root это стало бы доступно CTL_USER. Закрываем.
+if [ -f "$PROJECT_DIR/.env" ]; then
+    chmod 600 "$PROJECT_DIR/.env"
+fi
 
 # 3. authorized_keys с forced command на scripts/wdtt-ctl.sh
 chmod +x "$CTL_SCRIPT"
