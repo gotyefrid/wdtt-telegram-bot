@@ -42,6 +42,13 @@ class GetLink(StatesGroup):
 class Rename(StatesGroup):
     waiting_name = State()
 
+class EditClient(StatesGroup):
+    waiting_vk_hash = State()
+    waiting_days    = State()
+
+class Settings(StatesGroup):
+    waiting_domain = State()
+
 
 # ---------------------------------------------------------------------------
 # Keyboards
@@ -51,6 +58,14 @@ def kb_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Создать клиента",  callback_data="newclient")],
         [InlineKeyboardButton(text="📋 Список клиентов", callback_data="clients")],
+        [InlineKeyboardButton(text="⚙️ Настройки",       callback_data="settings")],
+    ])
+
+
+def kb_settings() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌐 Изменить домен", callback_data="setdomain")],
+        [InlineKeyboardButton(text="← Главное меню",    callback_data="menu")],
     ])
 
 
@@ -70,9 +85,19 @@ def kb_clients(clients: list[dict]) -> InlineKeyboardMarkup:
 def kb_client_actions(password: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🔗 Получить ссылку", callback_data=f"link:{password}")],
-        [InlineKeyboardButton(text="✏️ Переименовать",   callback_data=f"rename:{password}")],
+        [InlineKeyboardButton(text="✏️ Редактировать",   callback_data=f"edit:{password}")],
         [InlineKeyboardButton(text="🗑 Удалить",          callback_data=f"del:{password}")],
         [InlineKeyboardButton(text="← Список",           callback_data="clients")],
+    ])
+
+
+def kb_edit_client(password: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Переименовать", callback_data=f"rename:{password}")],
+        [InlineKeyboardButton(text="🔑 VK-хеш",         callback_data=f"editvk:{password}")],
+        [InlineKeyboardButton(text="🔘 Статус",         callback_data=f"editstatus:{password}")],
+        [InlineKeyboardButton(text="📅 Срок",           callback_data=f"editexpiry:{password}")],
+        [InlineKeyboardButton(text="← Назад",           callback_data=f"client:{password}")],
     ])
 
 
@@ -125,6 +150,29 @@ async def screen_clients(target: Message | CallbackQuery) -> None:
         await target.answer(text, reply_markup=kb)
 
 
+async def screen_settings(target: Message | CallbackQuery) -> None:
+    domain = wdtt.get_public_domain()
+    text = f"⚙️ Настройки:\n\nТекущий домен/IP: <code>{html.escape(domain)}</code>"
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=kb_settings(), parse_mode="HTML")
+        await target.answer()
+    else:
+        await target.answer(text, reply_markup=kb_settings(), parse_mode="HTML")
+
+
+_DOMAIN_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")
+
+
+def _normalize_domain(raw: str) -> str | None:
+    s = raw.strip()
+    s = re.sub(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", "", s)
+    s = s.split("/", 1)[0]
+    s = s.rstrip(".")
+    if not s or not _DOMAIN_RE.match(s):
+        return None
+    return s
+
+
 def _status_text(client: dict) -> str:
     if client["is_deactivated"]:
         return "🔴 деактивирован"
@@ -137,7 +185,9 @@ def _expires_text(client: dict) -> str:
     if not client["expires_at"]:
         return "бессрочно"
     dt = datetime.fromtimestamp(client["expires_at"])
-    return f"до {dt.strftime('%d.%m.%Y %H:%M')}"
+    remaining = client["expires_at"] - int(time.time())
+    days_left = max(0, -(-remaining // 86400))  # ceil, clamped at 0
+    return f"до {dt.strftime('%d.%m.%Y %H:%M')} ({days_left} дн.)"
 
 
 def _device_text(client: dict) -> str:
@@ -163,11 +213,15 @@ def _links_text(password: str, vk_hash: str) -> str:
     )
 
 
-async def screen_client(cb: CallbackQuery, password: str) -> None:
+async def screen_client(target: Message | CallbackQuery, password: str) -> None:
     try:
         client = wdtt.get_client(password)
     except Exception as e:
-        await cb.answer(f"Ошибка: {e}", show_alert=True)
+        err = f"Ошибка: {e}"
+        if isinstance(target, CallbackQuery):
+            await target.answer(err, show_alert=True)
+        else:
+            await target.answer(err)
         return
     name = client["name"] or "без имени"
     vk_hash = client["vk_hash"] or "не задан"
@@ -179,7 +233,23 @@ async def screen_client(cb: CallbackQuery, password: str) -> None:
         f"Срок: {_expires_text(client)}\n"
         f"Устройство: {html.escape(_device_text(client))}"
     )
-    await cb.message.edit_text(text, reply_markup=kb_client_actions(password), parse_mode="HTML")
+    kb = kb_client_actions(password)
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        await target.answer()
+    else:
+        await target.answer(text, reply_markup=kb, parse_mode="HTML")
+
+
+async def screen_edit_client(cb: CallbackQuery, password: str) -> None:
+    try:
+        client = wdtt.get_client(password)
+    except Exception as e:
+        await cb.answer(f"Ошибка: {e}", show_alert=True)
+        return
+    name = client["name"] or "без имени"
+    text = f'✏️ Редактирование "{html.escape(name)}":'
+    await cb.message.edit_text(text, reply_markup=kb_edit_client(password), parse_mode="HTML")
     await cb.answer()
 
 
@@ -257,6 +327,54 @@ async def cb_client(cb: CallbackQuery, state: FSMContext):
     await state.clear()
     password = cb.data.split(":", 1)[1]
     await screen_client(cb, password)
+
+
+@dp.callback_query(F.data.startswith("edit:"))
+async def cb_edit(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    await state.clear()
+    password = cb.data.split(":", 1)[1]
+    await screen_edit_client(cb, password)
+
+
+# ---------------------------------------------------------------------------
+# Callback handlers — settings
+# ---------------------------------------------------------------------------
+
+@dp.callback_query(F.data == "settings")
+async def cb_settings(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    await state.clear()
+    await screen_settings(cb)
+
+
+@dp.callback_query(F.data == "setdomain")
+async def cb_setdomain(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    await state.set_state(Settings.waiting_domain)
+    await cb.message.edit_text(
+        f"Текущий домен/IP: <code>{html.escape(wdtt.get_public_domain())}</code>\n\n"
+        "Введите новый домен или IP:\n(/cancel — отменить)",
+        reply_markup=None,
+        parse_mode="HTML",
+    )
+    await cb.answer()
+
+
+@dp.message(Settings.waiting_domain)
+async def step_domain(message: Message, state: FSMContext):
+    raw = message.text.strip() if message.text else ""
+    domain = _normalize_domain(raw)
+    if not domain:
+        await message.answer("Некорректный домен или IP. Попробуйте ещё раз:")
+        return
+    await state.clear()
+    wdtt.set_public_domain(domain)
+    await message.answer(f'✅ Домен изменён на: <code>{html.escape(domain)}</code>', parse_mode="HTML")
+    await screen_settings(message)
 
 
 # ---------------------------------------------------------------------------
@@ -439,7 +557,138 @@ async def step_rename(message: Message, state: FSMContext):
 
     await send_backup(message.bot)
     await message.answer(f'✅ Клиент переименован в "{html.escape(name)}".', parse_mode="HTML")
-    await screen_clients(message)
+    await screen_client(message, password)
+
+
+# ---------------------------------------------------------------------------
+# Callback handlers — edit VK-hash
+# ---------------------------------------------------------------------------
+
+@dp.callback_query(F.data.startswith("editvk:"))
+async def cb_editvk(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    password = cb.data.split(":", 1)[1]
+    try:
+        client = wdtt.get_client(password)
+    except Exception as e:
+        await cb.answer(f"Ошибка: {e}", show_alert=True)
+        return
+    await state.update_data(password=password)
+    await state.set_state(EditClient.waiting_vk_hash)
+    current = html.escape(client["vk_hash"] or "не задан")
+    await cb.message.edit_text(
+        f"Текущий VK-хеш: {current}\n\n"
+        "Введите новый VK-хеш или ссылку на VK-звонок:\n(/cancel — отменить)",
+        reply_markup=None,
+        parse_mode="HTML",
+    )
+    await cb.answer()
+
+
+@dp.message(EditClient.waiting_vk_hash)
+async def step_editvk(message: Message, state: FSMContext):
+    raw = message.text.strip() if message.text else ""
+    if not raw:
+        await message.answer("Отправьте VK-хеш или ссылку текстом:")
+        return
+    data = await state.get_data()
+    password = data["password"]
+    await state.clear()
+
+    try:
+        vk_hash = wdtt.set_vk_hash(password, raw)
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        await screen_menu(message)
+        return
+
+    await send_backup(message.bot)
+    await message.answer(f'✅ VK-хеш обновлён: <code>{html.escape(vk_hash)}</code>', parse_mode="HTML")
+    await screen_client(message, password)
+
+
+# ---------------------------------------------------------------------------
+# Callback handlers — edit expiry
+# ---------------------------------------------------------------------------
+
+@dp.callback_query(F.data.startswith("editexpiry:"))
+async def cb_editexpiry(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    password = cb.data.split(":", 1)[1]
+    await state.update_data(password=password)
+    await state.set_state(EditClient.waiting_days)
+    await cb.message.edit_text(
+        "Введите срок действия в днях от текущего момента (1–365):\n(/cancel — отменить)",
+        reply_markup=None,
+    )
+    await cb.answer()
+
+
+@dp.message(EditClient.waiting_days)
+async def step_editdays(message: Message, state: FSMContext):
+    raw = message.text.strip() if message.text else ""
+    if not raw.isdigit() or not (1 <= int(raw) <= 365):
+        await message.answer("Введите целое число от 1 до 365. Попробуйте ещё раз:")
+        return
+    days = int(raw)
+    data = await state.get_data()
+    password = data["password"]
+    await state.clear()
+
+    await message.answer("⏳ Сохраняю...")
+    try:
+        wdtt.set_expires_days(password, days)
+    except Exception as e:
+        await message.answer(f"Ошибка: {e}")
+        await screen_menu(message)
+        return
+
+    await send_backup(message.bot)
+    await message.answer(f"✅ Срок продлён на {days} дн. от текущего момента.")
+    await screen_client(message, password)
+
+
+# ---------------------------------------------------------------------------
+# Callback handlers — edit status
+# ---------------------------------------------------------------------------
+
+@dp.callback_query(F.data.startswith("editstatus:"))
+async def cb_editstatus(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    password = cb.data.split(":", 1)[1]
+    try:
+        client = wdtt.get_client(password)
+    except Exception as e:
+        await cb.answer(f"Ошибка: {e}", show_alert=True)
+        return
+    current = "🔴 деактивирован" if client["is_deactivated"] else "🟢 активен"
+    action_text = "🟢 Активировать" if client["is_deactivated"] else "🔴 Деактивировать"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=action_text, callback_data=f"statustoggle:{password}")],
+        [InlineKeyboardButton(text="← Назад", callback_data=f"edit:{password}")],
+    ])
+    await cb.message.edit_text(f"Текущий статус: {current}", reply_markup=kb)
+    await cb.answer()
+
+
+@dp.callback_query(F.data.startswith("statustoggle:"))
+async def cb_statustoggle(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    password = cb.data.split(":", 1)[1]
+    try:
+        client = wdtt.get_client(password)
+        wdtt.set_deactivated(password, not client["is_deactivated"])
+    except Exception as e:
+        await cb.answer(f"Ошибка: {e}", show_alert=True)
+        return
+
+    await send_backup(cb.bot)
+    await cb.answer("Статус изменён")
+    await screen_client(cb, password)
 
 
 # ---------------------------------------------------------------------------

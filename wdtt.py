@@ -21,6 +21,7 @@ WDTT_PORTS = "56000,56001,9000"
 _PASSWORDS_FILE = os.path.join(WDTT_CONFIG_DIR, "passwords.json")
 _NAMES_FILE = os.path.join(WDTT_CONFIG_DIR, "names.json")
 _BACKUP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backups", "wdtt")
+_SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "settings.json")
 
 
 # ---------------------------------------------------------------------------
@@ -57,6 +58,22 @@ def _read_names() -> dict:
 
 def _write_names_atomic(data: dict) -> None:
     _write_json_atomic(_NAMES_FILE, data)
+
+
+def _read_settings() -> dict:
+    return _read_json(_SETTINGS_FILE, {})
+
+
+def get_public_domain() -> str:
+    """Домен/IP, подставляемый в ссылки. Переопределяется через бота (settings.json),
+    по умолчанию — WDTT_PUBLIC_IP из .env."""
+    return _read_settings().get("public_domain") or WDTT_PUBLIC_IP
+
+
+def set_public_domain(domain: str) -> None:
+    settings = _read_settings()
+    settings["public_domain"] = domain
+    _write_json_atomic(_SETTINGS_FILE, settings)
 
 
 def _backup() -> None:
@@ -278,24 +295,52 @@ def set_vk_hash(password: str, vk_hash: str) -> str:
     return vk_hash
 
 
+def set_deactivated(password: str, is_deactivated: bool) -> None:
+    def mutator(data: dict) -> None:
+        passwords = data.setdefault("passwords", {})
+        entry = passwords.get(password)
+        if entry is None:
+            raise RuntimeError(f"Клиент с паролем {password} не найден")
+        entry["is_deactivated"] = is_deactivated
+
+    _with_service_restart(mutator)
+
+
+def set_expires_days(password: str, expires_days: int) -> int:
+    def mutator(data: dict) -> int:
+        passwords = data.setdefault("passwords", {})
+        entry = passwords.get(password)
+        if entry is None:
+            raise RuntimeError(f"Клиент с паролем {password} не найден")
+        expires_at = int(time.time()) + expires_days * 86400
+        entry["expires_at"] = expires_at
+        return expires_at
+
+    return _with_service_restart(mutator)
+
+
 def build_wdtt_link(password: str, vk_hash: str) -> str:
     ports = WDTT_PORTS.split(",")
-    return f"wdtt://{WDTT_PUBLIC_IP}:{ports[0]}:{ports[1]}:{ports[2]}:{password}:{vk_hash}"
+    return f"wdtt://{get_public_domain()}:{ports[0]}:{ports[1]}:{ports[2]}:{password}:{vk_hash}"
 
 
 def ios_peer_address() -> str:
     """host:port для iOS-ссылки (SRTP-WRAP-A) — тот же сервер, что и у wdtt://,
     порт — первый из WDTT_PORTS (56000)."""
-    return f"{WDTT_PUBLIC_IP}:{WDTT_PORTS.split(',')[0]}"
+    return f"{get_public_domain()}:{WDTT_PORTS.split(',')[0]}"
 
 
 def backup_archive() -> tuple[bytes, str]:
-    """Архив passwords.json + names.json на текущий момент — для отправки в Telegram
-    после каждого изменения клиентов."""
+    """Архив passwords.json + names.json + settings.json на текущий момент — для
+    отправки в Telegram после каждого изменения клиентов."""
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for path, arcname in ((_PASSWORDS_FILE, "passwords.json"), (_NAMES_FILE, "names.json")):
+        for path, arcname in (
+            (_PASSWORDS_FILE, "passwords.json"),
+            (_NAMES_FILE, "names.json"),
+            (_SETTINGS_FILE, "settings.json"),
+        ):
             if os.path.exists(path):
                 tar.add(path, arcname=arcname)
     return buf.getvalue(), f"wdtt-backup-{stamp}.tar.gz"
