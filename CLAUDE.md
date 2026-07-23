@@ -28,9 +28,9 @@ docker logs wdtt-telegram-bot        # логи
 | `config.py` | Конфиг из переменных окружения |
 | `.env` | Секреты и настройки (не в git) |
 | `docker-compose.yml` | Сервис `wdtt-telegram-bot`: монтирует `.` в `/app` и `/etc/wdtt` в `/etc/wdtt` |
-| `settings.json` | Переопределённый через бота домен/IP для ссылок (не в git, создаётся автоматически). Если файла/ключа нет — используется `WDTT_PUBLIC_IP` из `.env` |
+| `settings.json` | Переопределённый через бота домен/IP для ссылок и флаг отправки бекапов (не в git, создаётся автоматически). Если файла/ключа `public_domain` нет — используется `WDTT_PUBLIC_IP` из `.env`; если ключа `backups_enabled` нет — бекапы выключены по умолчанию |
 | `secrets/wdtt_ssh_key` | Приватный ключ для forced-command SSH к хосту (не в git) |
-| `backups/wdtt/` | Бэкапы `passwords.json` перед каждой записью (не в git) |
+| `backups/wdtt/` | Бэкапы `passwords.json` перед каждой записью (не в git). Хранится не больше `WDTT_MAX_BACKUPS` файлов — самый старый удаляется при создании нового |
 | `scripts/setup-wdtt-ssh.sh` | Провижининг SSH-доступа к `wdtt.service` при разворачивании на новом сервере: создаёт пользователя `wdtt-ctl`, ключ, forced-command и sudo-правило. Запускать от root на хосте один раз, идемпотентен |
 | `scripts/wdtt-ctl.sh` | Forced-command скрипт, на который указывает ключ из `setup-wdtt-ssh.sh`; разбирает `start`/`stop`/`status` и вызывает `systemctl` через `sudo` |
 
@@ -41,8 +41,10 @@ docker logs wdtt-telegram-bot        # логи
 | `TELEGRAM_BOT_TOKEN` | Токен бота |
 | `ALLOWED_USERS` | Telegram user_id через запятую |
 | `WDTT_CONFIG_DIR` | Путь к конфигу wdtt в контейнере (`/etc/wdtt`) |
-| `WDTT_PUBLIC_IP` | Публичный IP для ссылок `wdtt://` |
+| `WDTT_PUBLIC_IP` | Публичный IP/домен сервера, на котором запускается бот |
 | `WDTT_SERVICE_NAME` | Имя systemd-юнита (`wdtt`) |
+| `WDTT_PORTS` | Три порта `wdtt.service` через запятую, в том же порядке, что в `wdtt://`-ссылке (по умолчанию `56000,56001,9000`); первый из них также используется как порт в адресе для iOS-ссылки |
+| `WDTT_MAX_BACKUPS` | Сколько локальных файлов в `backups/wdtt/` хранить одновременно (по умолчанию `20`); при превышении удаляются самые старые |
 | `WDTT_SSH_HOST` / `WDTT_SSH_USER` / `WDTT_SSH_KEY_PATH` | SSH-доступ к хосту для start/stop/status сервиса. `WDTT_SSH_USER` — непривилегированный пользователь `wdtt-ctl`, создаётся `scripts/setup-wdtt-ssh.sh` |
 
 ## Команды бота
@@ -51,6 +53,10 @@ docker logs wdtt-telegram-bot        # логи
 |---|---|
 | `/start` | Главное меню с инлайн-кнопками |
 | `/cancel` | Отменить текущий FSM-диалог |
+
+Список команд (`bot.BOT_COMMANDS`) регистрируется через `bot.set_my_commands`
+при каждом запуске бота (в `main()`), поэтому меню команд в Telegram
+(кнопка "/") всегда соответствует коду, без ручной настройки через BotFather.
 
 Основное взаимодействие — через инлайн-кнопки:
 
@@ -64,7 +70,9 @@ docker logs wdtt-telegram-bot        # логи
   - **Срок** → диалог: число дней 1–365 (как при создании) → `wdtt.set_expires_days`, пересчитывает `expires_at` = текущее время + N дней (не прибавляет к старому сроку, а задаёт новый от текущего момента)
   - Все пункты после сохранения возвращают на карточку клиента
 - **Удалить** → подтверждение → удаление записи + связанного устройства
-- **Настройки** → **Изменить домен** → диалог: новый домен/IP → `wdtt.set_public_domain` (сохраняется в `settings.json`, подставляется во все новые ссылки вместо `WDTT_PUBLIC_IP`); доступно в любой момент из главного меню, вне диалога создания клиента
+- **Настройки** → доступно в любой момент из главного меню, вне диалога создания клиента:
+  - **Изменить домен** → диалог: новый домен/IP → `wdtt.set_public_domain` (сохраняется в `settings.json`, подставляется во все новые ссылки вместо `WDTT_PUBLIC_IP`)
+  - **Бекапы** → экран с описанием (бекапы шлются только в момент изменений, не по расписанию) и одной кнопкой-переключателем (Включить/Выключить) → `wdtt.set_backups_enabled`
 
 В карточке клиента срок действия показывается с количеством оставшихся дней в
 скобках, например `до 01.08.2026 12:00 (9 дн.)` (округление вверх, минимум 0).
@@ -72,7 +80,10 @@ docker logs wdtt-telegram-bot        # логи
 После каждого создания/переименования/задания VK-хеша/удаления клиента бот
 шлёт всем `ALLOWED_USERS` архив `passwords.json`+`names.json`+`settings.json`
 (`bot.send_backup`, `wdtt.backup_archive`) беззвучным сообщением
-(`disable_notification=True`) — бекап без отдельного крона.
+(`disable_notification=True`) — бекап без отдельного крона. По умолчанию
+отправка выключена; включить можно в **Настройки → Бекапы**
+(`wdtt.get_backups_enabled`/`set_backups_enabled`, сохраняется в
+`settings.json`); `send_backup` проверяет флаг перед отправкой.
 
 ## FSM-состояния
 
@@ -106,6 +117,8 @@ short_password(password)                   # "AAAA...ZZZZ" — заглушка 
 backup_archive()                           # (bytes, filename) — tar.gz из passwords.json+names.json+settings.json в памяти
 get_public_domain()                        # домен/IP для ссылок: settings.json, иначе WDTT_PUBLIC_IP
 set_public_domain(domain)                  # сохраняет домен/IP в settings.json
+get_backups_enabled()                      # включена ли отправка бекапов (settings.json, по умолчанию False)
+set_backups_enabled(enabled)               # включает/выключает отправку бекапов в settings.json
 ```
 
 Мутирующие функции (`add_client`, `delete_client`, `set_vk_hash`,
@@ -121,5 +134,5 @@ SSH `start` → SSH `status`, т.к. сам сервис периодическ�
 
 ## Известные ограничения
 
-- Лимита на число клиентов нет (в отличие от `maxGeneratedPasswords=10` у встроенного self-service бота оригинального сервера — он на нашу логику не распространяется)
-- Порты и путь конфига фиксированы через `.env`, диалогом не настраиваются
+- Лимит на число клиентов ограничен количеством доступных IP-адресов WireGuard (в отличие от `maxGeneratedPasswords=10` у встроенного self-service бота оригинального сервера — он на нашу логику не распространяется)
+- Порты (`WDTT_PORTS`) и путь конфига (`WDTT_CONFIG_DIR`) настраиваются только через `.env`, диалогом бота — нет

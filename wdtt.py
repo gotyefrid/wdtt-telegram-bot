@@ -10,13 +10,14 @@ from datetime import datetime
 from config import (
     WDTT_CONFIG_DIR,
     WDTT_PUBLIC_IP,
+    WDTT_PORTS,
+    WDTT_MAX_BACKUPS,
     WDTT_SSH_HOST,
     WDTT_SSH_USER,
     WDTT_SSH_KEY_PATH,
 )
 
 PASS_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
-WDTT_PORTS = "56000,56001,9000"
 
 _PASSWORDS_FILE = os.path.join(WDTT_CONFIG_DIR, "passwords.json")
 _NAMES_FILE = os.path.join(WDTT_CONFIG_DIR, "names.json")
@@ -76,6 +77,17 @@ def set_public_domain(domain: str) -> None:
     _write_json_atomic(_SETTINGS_FILE, settings)
 
 
+def get_backups_enabled() -> bool:
+    """Включена ли отправка бекапов в Telegram при изменении клиентов (по умолчанию — нет)."""
+    return bool(_read_settings().get("backups_enabled", False))
+
+
+def set_backups_enabled(enabled: bool) -> None:
+    settings = _read_settings()
+    settings["backups_enabled"] = enabled
+    _write_json_atomic(_SETTINGS_FILE, settings)
+
+
 def _backup() -> None:
     os.makedirs(_BACKUP_DIR, exist_ok=True)
     data = _read_json(_PASSWORDS_FILE, None)
@@ -86,6 +98,19 @@ def _backup() -> None:
     with open(dest, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.chmod(dest, 0o600)
+    _prune_backups()
+
+
+def _prune_backups() -> None:
+    """Оставляет не больше WDTT_MAX_BACKUPS файлов в _BACKUP_DIR, удаляя самые
+    старые (имена начинаются с timestamp'а, поэтому сортировка по имени —
+    она же сортировка по времени)."""
+    files = sorted(f for f in os.listdir(_BACKUP_DIR) if f.endswith("_passwords.json"))
+    excess = len(files) - WDTT_MAX_BACKUPS
+    if excess <= 0:
+        return
+    for f in files[:excess]:
+        os.remove(os.path.join(_BACKUP_DIR, f))
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +351,7 @@ def build_wdtt_link(password: str, vk_hash: str) -> str:
 
 def ios_peer_address() -> str:
     """host:port для iOS-ссылки (SRTP-WRAP-A) — тот же сервер, что и у wdtt://,
-    порт — первый из WDTT_PORTS (56000)."""
+    порт — первый из WDTT_PORTS."""
     return f"{get_public_domain()}:{WDTT_PORTS.split(',')[0]}"
 
 

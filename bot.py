@@ -10,6 +10,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
+    BotCommand,
     BufferedInputFile,
     CallbackQuery,
     InlineKeyboardButton,
@@ -65,7 +66,16 @@ def kb_main() -> InlineKeyboardMarkup:
 def kb_settings() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🌐 Изменить домен", callback_data="setdomain")],
+        [InlineKeyboardButton(text="💾 Бекапы",          callback_data="backups_menu")],
         [InlineKeyboardButton(text="← Главное меню",    callback_data="menu")],
+    ])
+
+
+def kb_backups(enabled: bool) -> InlineKeyboardMarkup:
+    action_text = "🔴 Выключить" if enabled else "🟢 Включить"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=action_text, callback_data="backupstoggle")],
+        [InlineKeyboardButton(text="← Настройки", callback_data="settings")],
     ])
 
 
@@ -152,12 +162,34 @@ async def screen_clients(target: Message | CallbackQuery) -> None:
 
 async def screen_settings(target: Message | CallbackQuery) -> None:
     domain = wdtt.get_public_domain()
-    text = f"⚙️ Настройки:\n\nТекущий домен/IP: <code>{html.escape(domain)}</code>"
+    backups = "🟢 включены" if wdtt.get_backups_enabled() else "🔴 выключены"
+    text = (
+        f"⚙️ Настройки:\n\n"
+        f"Текущий домен/IP: <code>{html.escape(domain)}</code>\n"
+        f"Бекапы: {backups}"
+    )
     if isinstance(target, CallbackQuery):
         await target.message.edit_text(text, reply_markup=kb_settings(), parse_mode="HTML")
         await target.answer()
     else:
         await target.answer(text, reply_markup=kb_settings(), parse_mode="HTML")
+
+
+async def screen_backups(target: Message | CallbackQuery) -> None:
+    enabled = wdtt.get_backups_enabled()
+    status = "🟢 включены" if enabled else "🔴 выключены"
+    text = (
+        f"💾 Бекапы: {status}\n\n"
+        f"Бекапы (<code>passwords.json</code> + <code>names.json</code> + "
+        f"<code>settings.json</code>) присылаются сюда автоматически только в "
+        f"момент, когда что-либо меняется — создание, переименование, смена "
+        f"VK-хеша или удаление клиента. По расписанию бекапы не отправляются."
+    )
+    if isinstance(target, CallbackQuery):
+        await target.message.edit_text(text, reply_markup=kb_backups(enabled), parse_mode="HTML")
+        await target.answer()
+    else:
+        await target.answer(text, reply_markup=kb_backups(enabled), parse_mode="HTML")
 
 
 _DOMAIN_RE = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$")
@@ -262,7 +294,10 @@ def allowed(user_id: int) -> bool:
 
 
 async def send_backup(bot: Bot) -> None:
-    """Шлёт архив passwords.json+names.json всем ALLOWED_USERS беззвучным сообщением."""
+    """Шлёт архив passwords.json+names.json всем ALLOWED_USERS беззвучным сообщением,
+    если отправка бекапов не выключена в настройках."""
+    if not wdtt.get_backups_enabled():
+        return
     try:
         data, filename = wdtt.backup_archive()
     except Exception:
@@ -375,6 +410,23 @@ async def step_domain(message: Message, state: FSMContext):
     wdtt.set_public_domain(domain)
     await message.answer(f'✅ Домен изменён на: <code>{html.escape(domain)}</code>', parse_mode="HTML")
     await screen_settings(message)
+
+
+@dp.callback_query(F.data == "backups_menu")
+async def cb_backups_menu(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    await state.clear()
+    await screen_backups(cb)
+
+
+@dp.callback_query(F.data == "backupstoggle")
+async def cb_backupstoggle(cb: CallbackQuery, state: FSMContext):
+    if not allowed(cb.from_user.id):
+        return
+    wdtt.set_backups_enabled(not wdtt.get_backups_enabled())
+    await cb.answer("Настройка изменена")
+    await screen_backups(cb)
 
 
 # ---------------------------------------------------------------------------
@@ -733,8 +785,15 @@ async def cb_del_confirm(cb: CallbackQuery, state: FSMContext):
 # Entry point
 # ---------------------------------------------------------------------------
 
+BOT_COMMANDS = [
+    BotCommand(command="start", description="Главное меню"),
+    BotCommand(command="cancel", description="Отменить текущий диалог"),
+]
+
+
 async def main():
     bot = Bot(token=BOT_TOKEN)
+    await bot.set_my_commands(BOT_COMMANDS)
     await dp.start_polling(bot)
 
 
