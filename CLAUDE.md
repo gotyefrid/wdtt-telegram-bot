@@ -1,4 +1,4 @@
-# vkturntgbot — Документация проекта
+# wdtt-telegram-bot — Документация проекта
 
 ## Назначение
 
@@ -15,7 +15,7 @@ SRTP-WRAP-A (iOS-приложение, `ios_link.py`) — обе использ�
 ```bash
 docker compose up -d --build   # сборка и запуск
 docker compose restart         # перезапуск без пересборки
-docker logs vkturntgbot        # логи
+docker logs wdtt-telegram-bot        # логи
 ```
 
 ## Структура файлов
@@ -27,7 +27,7 @@ docker logs vkturntgbot        # логи
 | `ios_link.py` | `build_ios_link(vk_link, peer_address, wrap_a_password)` — сборка `vkturnproxy://` ссылки для iOS в режиме SRTP-WRAP-A (урезанный `quick_link.py` из anton48/vk-turn-proxy-ios, только этот режим). `peer_address` = `wdtt.ios_peer_address()` (адрес `wdtt.service`, порт 56000), `wrap_a_password` = пароль клиента |
 | `config.py` | Конфиг из переменных окружения |
 | `.env` | Секреты и настройки (не в git) |
-| `docker-compose.yml` | Сервис `vkturntgbot`: монтирует `.` в `/app` и `/etc/wdtt` в `/etc/wdtt` |
+| `docker-compose.yml` | Сервис `wdtt-telegram-bot`: монтирует `.` в `/app` и `/etc/wdtt` в `/etc/wdtt` |
 | `settings.json` | Переопределённый через бота домен/IP для ссылок (не в git, создаётся автоматически). Если файла/ключа нет — используется `WDTT_PUBLIC_IP` из `.env` |
 | `secrets/wdtt_ssh_key` | Приватный ключ для forced-command SSH к хосту (не в git) |
 | `backups/wdtt/` | Бэкапы `passwords.json` перед каждой записью (не в git) |

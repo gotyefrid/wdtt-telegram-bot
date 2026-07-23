@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Провижининг SSH-доступа для управления wdtt.service ботом vkturntgbot.
+# Провижининг SSH-доступа для управления wdtt.service ботом wdtt-telegram-bot.
 #
 # Запускать от root НА ХОСТЕ (не в контейнере) при разворачивании на новом сервере,
 # после того как wdtt.service уже установлен и настроен.
@@ -43,7 +43,7 @@ install -d -m 700 -o "$CTL_USER" -g "$CTL_USER" "/home/$CTL_USER/.ssh"
 # 2. Ключевая пара для бота
 mkdir -p "$PROJECT_DIR/secrets"
 if [ ! -f "$KEY_PATH" ]; then
-    ssh-keygen -t ed25519 -N "" -C "vkturntgbot-wdtt-ctl" -f "$KEY_PATH" >/dev/null
+    ssh-keygen -t ed25519 -N "" -C "wdtt-telegram-bot-ctl" -f "$KEY_PATH" >/dev/null
     echo "Сгенерирован ключ $KEY_PATH"
 else
     echo "Ключ $KEY_PATH уже существует, пропускаю генерацию"

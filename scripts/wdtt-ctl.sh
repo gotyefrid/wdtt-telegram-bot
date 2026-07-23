@@ -1,5 +1,5 @@
 #!/bin/sh
-# Forced command для SSH-ключа vkturntgbot-wdtt-ctl (см. scripts/setup-wdtt-ssh.sh).
+# Forced command для SSH-ключа wdtt-telegram-bot-ctl (см. scripts/setup-wdtt-ssh.sh).
 # Разбирает $SSH_ORIGINAL_COMMAND по белому списку и вызывает systemctl через sudo.
 # Любая другая команда — отказ.
 set -eu

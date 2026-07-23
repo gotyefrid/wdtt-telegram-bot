@@ -1,7 +1,7 @@
 services:
-  vkturntgbot:
+  wdtt-telegram-bot:
     build: .
-    container_name: vkturntgbot
+    container_name: wdtt-telegram-bot
     restart: unless-stopped
     env_file: .env
     volumes:
