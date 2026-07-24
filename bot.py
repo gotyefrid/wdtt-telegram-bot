@@ -79,12 +79,14 @@ def kb_backups(enabled: bool) -> InlineKeyboardMarkup:
 
 
 def kb_clients(clients: list[dict]) -> InlineKeyboardMarkup:
-    buttons = [
-        InlineKeyboardButton(
-            text=c["name"] if c["name"] else wdtt.short_password(c["password"]),
-            callback_data=f"client:{c['password']}",
-        )
+    labels = [
+        (c["name"] if c["name"] else wdtt.short_password(c["password"]), c["password"])
         for c in clients
+    ]
+    labels.sort(key=lambda item: item[0].lower())
+    buttons = [
+        InlineKeyboardButton(text=label, callback_data=f"client:{password}")
+        for label, password in labels
     ]
     rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
     rows.append([InlineKeyboardButton(text="← Главное меню", callback_data="menu")])
