@@ -22,7 +22,6 @@ from aiogram.types import (
 NO_PREVIEW = LinkPreviewOptions(is_disabled=True)
 from config import BOT_TOKEN, ALLOWED_USERS
 import wdtt
-from ios_link import build_ios_link
 
 logging.basicConfig(level=logging.INFO)
 dp = Dispatcher()
@@ -234,15 +233,8 @@ def _qr_link(data: str) -> str:
 
 def _links_text(password: str, vk_hash: str) -> str:
     wdtt_link = wdtt.build_wdtt_link(password, vk_hash)
-    ios_link = build_ios_link(vk_hash, wdtt.ios_peer_address(), password)
     wdtt_qr = _qr_link(wdtt_link)
-    ios_qr = _qr_link(ios_link)
-    return (
-        f"WDTT:\n<code>{wdtt_link}</code>\n"
-        f'<a href="{wdtt_qr}">QR-код WDTT</a>\n\n'
-        f"iOS:\n<code>{ios_link}</code>\n"
-        f'<a href="{ios_qr}">QR-код iOS</a>'
-    )
+    return f"WDTT:\n<code>{wdtt_link}</code>\n" f'<a href="{wdtt_qr}">QR-код WDTT</a>'
 
 
 async def screen_client(target: Message | CallbackQuery, password: str) -> None:

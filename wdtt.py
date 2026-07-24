@@ -349,12 +349,6 @@ def build_wdtt_link(password: str, vk_hash: str) -> str:
     return f"wdtt://{get_public_domain()}:{ports[0]}:{ports[1]}:{ports[2]}:{password}:{vk_hash}"
 
 
-def ios_peer_address() -> str:
-    """host:port для iOS-ссылки (SRTP-WRAP-A) — тот же сервер, что и у wdtt://,
-    порт — первый из WDTT_PORTS."""
-    return f"{get_public_domain()}:{WDTT_PORTS.split(',')[0]}"
-
-
 def backup_archive() -> tuple[bytes, str]:
     """Архив passwords.json + names.json + settings.json на текущий момент — для
     отправки в Telegram после каждого изменения клиентов."""
