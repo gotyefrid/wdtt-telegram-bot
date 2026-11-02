@@ -545,7 +545,7 @@ async def step_days(message: Message, state: FSMContext):
         await screen_menu(message)
         return
     await message.answer(
-        f'✅ Клиент "{html.escape(name)}" ({clients.KIND_TITLES[kind]}) создан.\n\nСсылки для подключения:\n\n{links}',
+        f'✅ Клиент "{html.escape(client["name"])}" ({clients.KIND_TITLES[kind]}) создан.\n\nСсылки для подключения:\n\n{links}',
         parse_mode="HTML",
         link_preview_options=NO_PREVIEW,
     )

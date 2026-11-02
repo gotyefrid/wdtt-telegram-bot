@@ -78,13 +78,14 @@ def get_client(ref: str) -> dict:
 
 
 def add_client(kind: str, name: str, vk_hash: str, days: int) -> dict:
-    """Создаёт клиента, возвращает {ref, vk_hash}."""
+    """Создаёт клиента, возвращает {ref, vk_hash, name}; name — фактическое имя
+    (у iPhone при дубликате к нему дописывается дата и время)."""
     if kind == KIND_WDTT:
         r = wdtt.add_client(name, vk_hash, days)
-        return {"ref": make_ref(KIND_WDTT, r["password"]), "vk_hash": r["vk_hash"]}
+        return {"ref": make_ref(KIND_WDTT, r["password"]), "vk_hash": r["vk_hash"], "name": name}
     if kind == KIND_IPHONE:
         r = xui.add_client(name, vk_hash, days)
-        return {"ref": make_ref(KIND_IPHONE, r["name"]), "vk_hash": r["vk_hash"]}
+        return {"ref": make_ref(KIND_IPHONE, r["name"]), "vk_hash": r["vk_hash"], "name": r["name"]}
     raise RuntimeError(f"Неизвестный тип клиента: {kind}")
 
 

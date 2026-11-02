@@ -7,6 +7,7 @@ import ssl
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from config import (
@@ -20,6 +21,10 @@ from config import (
 )
 
 VK_CALL_BASE = "https://vk.ru/call/join/"
+
+# Суффикс к имени при дубликате email: Test -> Test_02112026_14_25 (время по Москве, UTC+3).
+_SUFFIX_TZ = timezone(timedelta(hours=3))
+MAX_NAME_LEN = 32
 
 _ctx = ssl.create_default_context()
 if not XUI_VERIFY_TLS:
@@ -156,19 +161,43 @@ def get_client(email: str) -> dict:
     raise RuntimeError(f"Клиент {email} не найден")
 
 
+def _is_duplicate_email(err: RuntimeError) -> bool:
+    msg = str(err).lower()
+    # Панель говорит по-разному, в зависимости от того, где поймала дубль.
+    return "duplicate email" in msg or "email already in use" in msg
+
+
+def _with_timestamp(name: str) -> str:
+    suffix = datetime.now(_SUFFIX_TZ).strftime("_%d%m%Y_%H_%M")
+    return name[: MAX_NAME_LEN - len(suffix)] + suffix
+
+
 def add_client(name: str, vk_hash: str, expires_days: int) -> dict:
+    """Email клиента уникален во всей панели 3x-ui. Если такой уже есть, к имени
+    дописывается дата и время (Test -> Test_02112026_14_25) и создание повторяется.
+    Возвращает фактически использованное имя."""
     vk_hash = strip_vk_hash(vk_hash)
     expiry_ms = (int(time.time()) + expires_days * 86400) * 1000
-    _call("POST", "/panel/api/clients/add", {
-        "client": {
-            "email": name,
-            "enable": True,
-            "expiryTime": expiry_ms,
-            "comment": vk_hash,
-            "keepAlive": 25,
-        },
-        "inboundIds": [XUI_INBOUND_ID],
-    })
+
+    def create(email: str) -> None:
+        _call("POST", "/panel/api/clients/add", {
+            "client": {
+                "email": email,
+                "enable": True,
+                "expiryTime": expiry_ms,
+                "comment": vk_hash,
+                "keepAlive": 25,
+            },
+            "inboundIds": [XUI_INBOUND_ID],
+        })
+
+    try:
+        create(name)
+    except RuntimeError as e:
+        if not _is_duplicate_email(e):
+            raise
+        name = _with_timestamp(name)
+        create(name)
     return {"name": name, "vk_hash": vk_hash}
 
 
